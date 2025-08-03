@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Coal Mining Data Pipeline Orchestration
-Runs the complete medallion architecture pipeline
-"""
 
 import sys
 import os
@@ -13,7 +9,6 @@ from datetime import datetime
 from config import get_config
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -24,7 +19,6 @@ def setup_logging():
     )
 
 def run_script(script_path: str, layer: str, source: str) -> bool:
-    """Run a pipeline script and return success status"""
     
     script_name = f"{layer}_{source}.py"
     full_path = os.path.join('/app/scripts', script_name)
@@ -61,7 +55,6 @@ def run_script(script_path: str, layer: str, source: str) -> bool:
         return False
 
 def run_bronze_layer() -> bool:
-    """Run all bronze layer pipelines"""
     
     logging.info("🥉 Starting Bronze Layer Processing")
     
@@ -76,7 +69,7 @@ def run_bronze_layer() -> bool:
     for layer, source in bronze_scripts:
         if run_script('', layer, source):
             success_count += 1
-        time.sleep(2)  # Small delay between scripts
+        time.sleep(2)
     
     if success_count == len(bronze_scripts):
         logging.info("🥉 Bronze Layer completed successfully")
@@ -86,7 +79,6 @@ def run_bronze_layer() -> bool:
         return False
 
 def run_silver_layer() -> bool:
-    """Run all silver layer pipelines"""
     
     logging.info("🥈 Starting Silver Layer Processing")
     
@@ -101,7 +93,7 @@ def run_silver_layer() -> bool:
     for layer, source in silver_scripts:
         if run_script('', layer, source):
             success_count += 1
-        time.sleep(2)  # Small delay between scripts
+        time.sleep(2)
     
     if success_count == len(silver_scripts):
         logging.info("🥈 Silver Layer completed successfully")
@@ -111,7 +103,6 @@ def run_silver_layer() -> bool:
         return False
 
 def run_gold_layer() -> bool:
-    """Run all gold layer pipelines"""
     
     logging.info("🥇 Starting Gold Layer Processing")
     
@@ -135,7 +126,6 @@ def run_gold_layer() -> bool:
         return False
 
 def check_prerequisites() -> bool:
-    """Check if all prerequisites are met"""
     
     logging.info("🔍 Checking prerequisites")
     
@@ -146,7 +136,6 @@ def check_prerequisites() -> bool:
             logging.error(f"Required directory does not exist: {dir_path}")
             return False
     
-    # Check if required files exist
     required_scripts = [
         'bronze_production.py',
         'bronze_equipment.py', 
@@ -174,7 +163,6 @@ def check_prerequisites() -> bool:
     return True
 
 def create_pipeline_summary(bronze_success: bool, silver_success: bool, gold_success: bool, total_duration: float):
-    """Create and log pipeline execution summary"""
     
     logging.info("📊 PIPELINE EXECUTION SUMMARY")
     logging.info("=" * 50)
@@ -192,7 +180,6 @@ def create_pipeline_summary(bronze_success: bool, silver_success: bool, gold_suc
     logging.info("=" * 50)
 
 def main():
-    """Main pipeline orchestration function"""
     
     setup_logging()
     

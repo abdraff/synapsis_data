@@ -102,7 +102,7 @@ def validate_weather_data(df: pd.DataFrame) -> pd.DataFrame:
     logging.info(f"Validated {initial_count} weather records")
     return df
 
-def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
+def load_to_bronze(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     """Load weather data to bronze layer"""
     
     # Add metadata columns
@@ -118,7 +118,7 @@ def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE bronze_weather_data 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing data from {min_date} to {max_date}")
     
     # Prepare DataFrame for insertion (remove validation flag for bronze table)
@@ -126,7 +126,7 @@ def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
     df_insert['date'] = df_insert['date'].dt.date  # Convert to date only
     
     # Insert new data
-    clickhouse_conn.insert_dataframe('bronze_weather_data', df_insert)
+    ch_conn.insert_dataframe('bronze_weather_data', df_insert)
     logging.info(f"Loaded {len(df_insert)} weather records to bronze layer")
 
 def main():
@@ -136,7 +136,7 @@ def main():
     
     try:
         # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
+        ch_conn = ClickHouseConnector(config.clickhouse)
         
         # Extract data
         weather_df = extract_weather_data(config.weather_api)
@@ -149,7 +149,7 @@ def main():
         validated_df = validate_weather_data(weather_df)
         
         # Load to bronze layer
-        load_to_bronze(clickhouse_conn, validated_df)
+        load_to_bronze(ch_conn, validated_df)
         
         logging.info("Bronze weather pipeline completed successfully")
         

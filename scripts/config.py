@@ -4,7 +4,6 @@ from typing import Optional
 
 @dataclass
 class DatabaseConfig:
-    """Database configuration settings"""
     host: str
     port: int
     user: str
@@ -13,7 +12,6 @@ class DatabaseConfig:
 
 @dataclass
 class WeatherAPIConfig:
-    """Weather API configuration"""
     base_url: str = "https://api.open-meteo.com/v1/forecast"
     latitude: float = 2.0167
     longitude: float = 117.3000
@@ -21,7 +19,6 @@ class WeatherAPIConfig:
 
 @dataclass
 class Config:
-    """Main configuration class"""
     mysql: DatabaseConfig
     clickhouse: DatabaseConfig
     weather_api: WeatherAPIConfig
@@ -30,7 +27,6 @@ class Config:
     batch_size: int = 1000
 
 def get_config() -> Config:
-    """Get configuration from environment variables"""
     return Config(
         mysql=DatabaseConfig(
             host=os.getenv("MYSQL_HOST", "localhost"),

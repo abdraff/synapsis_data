@@ -22,7 +22,7 @@ def setup_logging():
         ]
     )
 
-def extract_bronze_weather(clickhouse_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+def extract_bronze_weather(ch_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> pd.DataFrame:
     """Extract weather data from bronze layer"""
     
     # Default to last 30 days if no dates provided
@@ -42,7 +42,7 @@ def extract_bronze_weather(clickhouse_conn: ClickHouseConnector, start_date: str
     """
     
     logging.info(f"Extracting bronze weather data from {start_date} to {end_date}")
-    result = clickhouse_conn.execute_query(query)
+    result = ch_conn.execute_query(query)
     
     # Convert to DataFrame
     df = pd.DataFrame(result, columns=['date', 'temperature_mean', 'precipitation_sum'])
@@ -125,7 +125,7 @@ def validate_silver_weather_data(df: pd.DataFrame) -> pd.DataFrame:
     logging.info(f"Validated {len(df)} silver weather records")
     return df
 
-def load_to_silver(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
+def load_to_silver(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     """Load transformed weather data to silver layer"""
     
     # Clear existing data for the date range
@@ -137,11 +137,11 @@ def load_to_silver(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE silver_weather_clean 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing silver weather data from {min_date} to {max_date}")
     
     # Insert new data
-    clickhouse_conn.insert_dataframe('silver_weather_clean', df)
+    ch_conn.insert_dataframe('silver_weather_clean', df)
     logging.info(f"Loaded {len(df)} transformed weather records to silver layer")
 
 def main():
@@ -151,10 +151,10 @@ def main():
     
     try:
         # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
+        ch_conn = ClickHouseConnector(config.clickhouse)
         
         # Extract data from bronze layer
-        bronze_df = extract_bronze_weather(clickhouse_conn)
+        bronze_df = extract_bronze_weather(ch_conn)
         
         if bronze_df.empty:
             logging.warning("No bronze weather data found")
@@ -167,7 +167,7 @@ def main():
         validated_df = validate_silver_weather_data(silver_df)
         
         # Load to silver layer
-        load_to_silver(clickhouse_conn, validated_df)
+        load_to_silver(ch_conn, validated_df)
         
         logging.info("Silver weather pipeline completed successfully")
         

@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Gold Layer - Daily Production Metrics
-Creates business-ready daily production metrics combining all data sources
-"""
 
 import sys
 import logging
@@ -13,7 +9,6 @@ from config import get_config
 from database_utils import ClickHouseConnector
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -23,14 +18,13 @@ def setup_logging():
         ]
     )
 
-def extract_silver_data(clickhouse_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> tuple:
-    """Extract data from all silver layer tables"""
+def extract_silver_data(ch_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> tuple:
     
-    # Default to last 30 days if no dates provided
+    # Default to sample data range if no dates provided
     if not end_date:
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = '2025-06-30'
     if not start_date:
-        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        start_date = '2025-06-01'
     
     # Extract production data
     production_query = f"""
@@ -71,9 +65,9 @@ def extract_silver_data(clickhouse_conn: ClickHouseConnector, start_date: str = 
     
     logging.info(f"Extracting silver data from {start_date} to {end_date}")
     
-    production_result = clickhouse_conn.execute_query(production_query)
-    equipment_result = clickhouse_conn.execute_query(equipment_query)
-    weather_result = clickhouse_conn.execute_query(weather_query)
+    production_result = ch_conn.execute_query(production_query)
+    equipment_result = ch_conn.execute_query(equipment_query)
+    weather_result = ch_conn.execute_query(weather_query)
     
     # Convert to DataFrames
     production_df = pd.DataFrame(production_result, 
@@ -254,7 +248,7 @@ def validate_gold_data(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
+def load_to_gold(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     """Load daily metrics to gold layer"""
     
     # Clear existing data for the date range
@@ -266,7 +260,7 @@ def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE gold_daily_production_metrics 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing gold data from {min_date} to {max_date}")
     
     # Select and reorder columns for the gold table
@@ -280,20 +274,16 @@ def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
     df_gold = df[gold_columns].copy()
     
     # Insert new data
-    clickhouse_conn.insert_dataframe('gold_daily_production_metrics', df_gold)
+    ch_conn.insert_dataframe('gold_daily_production_metrics', df_gold)
     logging.info(f"Loaded {len(df_gold)} daily metrics to gold layer")
 
 def main():
-    """Main execution function"""
     setup_logging()
     config = get_config()
     
     try:
-        # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
-        
-        # Extract data from silver layers
-        production_df, equipment_df, weather_df = extract_silver_data(clickhouse_conn)
+        ch_conn = ClickHouseConnector(config.clickhouse)
+        production_df, equipment_df, weather_df = extract_silver_data(ch_conn)
         
         # Calculate daily metrics
         daily_metrics_df = calculate_daily_metrics(production_df, equipment_df, weather_df)
@@ -305,8 +295,7 @@ def main():
         # Validate gold data
         validated_df = validate_gold_data(daily_metrics_df)
         
-        # Load to gold layer
-        load_to_gold(clickhouse_conn, validated_df)
+        load_to_gold(ch_conn, validated_df)
         
         logging.info("Gold daily metrics pipeline completed successfully")
         

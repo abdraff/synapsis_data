@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Silver Layer - Production Data Transformation
-Transforms bronze production data into clean, aggregated daily metrics
-"""
 
 import sys
 import logging
@@ -12,7 +8,6 @@ from config import get_config
 from database_utils import ClickHouseConnector
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -22,14 +17,13 @@ def setup_logging():
         ]
     )
 
-def extract_bronze_production(clickhouse_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> pd.DataFrame:
-    """Extract production data from bronze layer"""
+def extract_bronze_production(ch_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> pd.DataFrame:
     
-    # Default to last 30 days if no dates provided
+    # Default to sample data range if no dates provided
     if not end_date:
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = '2025-06-30'
     if not start_date:
-        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        start_date = '2025-06-01'
     
     query = f"""
     SELECT 
@@ -44,7 +38,7 @@ def extract_bronze_production(clickhouse_conn: ClickHouseConnector, start_date: 
     """
     
     logging.info(f"Extracting bronze production data from {start_date} to {end_date}")
-    result = clickhouse_conn.execute_query(query)
+    result = ch_conn.execute_query(query)
     
     # Convert to DataFrame
     df = pd.DataFrame(result, columns=['date', 'mine_id', 'shift', 'tons_extracted', 'quality_grade'])
@@ -116,8 +110,7 @@ def validate_silver_data(df: pd.DataFrame) -> pd.DataFrame:
     logging.info(f"Validated {len(df)} silver production records")
     return df
 
-def load_to_silver(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
-    """Load transformed data to silver layer"""
+def load_to_silver(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     
     # Clear existing data for the date range
     if not df.empty:
@@ -128,24 +121,19 @@ def load_to_silver(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE silver_production_daily 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing silver data from {min_date} to {max_date}")
     
-    # Insert new data
-    clickhouse_conn.insert_dataframe('silver_production_daily', df)
+    ch_conn.insert_dataframe('silver_production_daily', df)
     logging.info(f"Loaded {len(df)} transformed production records to silver layer")
 
 def main():
-    """Main execution function"""
     setup_logging()
     config = get_config()
     
     try:
-        # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
-        
-        # Extract data from bronze layer
-        bronze_df = extract_bronze_production(clickhouse_conn)
+        ch_conn = ClickHouseConnector(config.clickhouse)
+        bronze_df = extract_bronze_production(ch_conn)
         
         if bronze_df.empty:
             logging.warning("No bronze production data found")
@@ -157,8 +145,7 @@ def main():
         # Validate transformed data
         validated_df = validate_silver_data(silver_df)
         
-        # Load to silver layer
-        load_to_silver(clickhouse_conn, validated_df)
+        load_to_silver(ch_conn, validated_df)
         
         logging.info("Silver production pipeline completed successfully")
         

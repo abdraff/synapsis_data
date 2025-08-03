@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Bronze Layer - Equipment Sensors Data Ingestion
-Extracts equipment sensor data from CSV and loads into ClickHouse bronze layer
-"""
 
 import sys
 import logging
@@ -12,7 +8,6 @@ from config import get_config
 from database_utils import ClickHouseConnector
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -23,7 +18,6 @@ def setup_logging():
     )
 
 def extract_equipment_data(csv_path: str) -> pd.DataFrame:
-    """Extract equipment sensor data from CSV"""
     
     logging.info(f"Reading equipment data from {csv_path}")
     
@@ -45,7 +39,6 @@ def extract_equipment_data(csv_path: str) -> pd.DataFrame:
         raise
 
 def validate_equipment_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Basic validation and data quality checks"""
     initial_count = len(df)
     
     # Check for missing values
@@ -73,8 +66,7 @@ def validate_equipment_data(df: pd.DataFrame) -> pd.DataFrame:
     logging.info(f"Validated {initial_count} equipment sensor records")
     return df
 
-def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
-    """Load equipment data to bronze layer"""
+def load_to_bronze(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     
     # Add metadata columns
     df['ingestion_timestamp'] = datetime.now()
@@ -89,24 +81,22 @@ def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE bronze_equipment_sensors 
         DELETE WHERE timestamp BETWEEN '{min_timestamp}' AND '{max_timestamp}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing data from {min_timestamp} to {max_timestamp}")
     
     # Prepare DataFrame for insertion (remove validation flag for bronze table)
     df_insert = df.drop(columns=['data_quality_flag'])
     
     # Insert new data
-    clickhouse_conn.insert_dataframe('bronze_equipment_sensors', df_insert)
+    ch_conn.insert_dataframe('bronze_equipment_sensors', df_insert)
     logging.info(f"Loaded {len(df_insert)} equipment sensor records to bronze layer")
 
 def main():
-    """Main execution function"""
     setup_logging()
     config = get_config()
     
     try:
-        # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
+        ch_conn = ClickHouseConnector(config.clickhouse)
         
         # Extract data
         equipment_df = extract_equipment_data(config.csv_file_path)
@@ -118,8 +108,7 @@ def main():
         # Validate data
         validated_df = validate_equipment_data(equipment_df)
         
-        # Load to bronze layer
-        load_to_bronze(clickhouse_conn, validated_df)
+        load_to_bronze(ch_conn, validated_df)
         
         logging.info("Bronze equipment pipeline completed successfully")
         

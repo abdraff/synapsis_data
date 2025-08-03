@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Gold Layer - Mine Performance Analysis
-Creates mine-specific performance metrics and rankings
-"""
 
 import sys
 import logging
@@ -13,7 +9,6 @@ from config import get_config
 from database_utils import ClickHouseConnector
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -23,14 +18,13 @@ def setup_logging():
         ]
     )
 
-def extract_silver_data(clickhouse_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> tuple:
-    """Extract mine production and weather data from silver layers"""
+def extract_silver_data(ch_conn: ClickHouseConnector, start_date: str = None, end_date: str = None) -> tuple:
     
-    # Default to last 30 days if no dates provided
+    # Default to sample data range if no dates provided
     if not end_date:
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = '2025-06-30'
     if not start_date:
-        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        start_date = '2025-06-01'
     
     # Extract production data by mine
     production_query = f"""
@@ -58,8 +52,8 @@ def extract_silver_data(clickhouse_conn: ClickHouseConnector, start_date: str = 
     
     logging.info(f"Extracting silver data for mine performance from {start_date} to {end_date}")
     
-    production_result = clickhouse_conn.execute_query(production_query)
-    weather_result = clickhouse_conn.execute_query(weather_query)
+    production_result = ch_conn.execute_query(production_query)
+    weather_result = ch_conn.execute_query(weather_query)
     
     # Convert to DataFrames
     production_df = pd.DataFrame(production_result, 
@@ -70,7 +64,7 @@ def extract_silver_data(clickhouse_conn: ClickHouseConnector, start_date: str = 
     logging.info(f"Extracted {len(production_df)} production records, {len(weather_df)} weather records")
     return production_df, weather_df
 
-def get_mine_names(clickhouse_conn: ClickHouseConnector) -> dict:
+def get_mine_names(ch_conn: ClickHouseConnector) -> dict:
     """Get mine names from the source system (if available)"""
     
     # This would typically come from a dimension table
@@ -236,7 +230,7 @@ def validate_mine_performance_data(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
+def load_to_gold(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     """Load mine performance data to gold layer"""
     
     # Clear existing data for the date range
@@ -248,7 +242,7 @@ def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE gold_mine_performance 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing gold mine performance data from {min_date} to {max_date}")
     
     # Select and reorder columns for the gold table
@@ -260,23 +254,17 @@ def load_to_gold(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
     df_gold = df[gold_columns].copy()
     
     # Insert new data
-    clickhouse_conn.insert_dataframe('gold_mine_performance', df_gold)
+    ch_conn.insert_dataframe('gold_mine_performance', df_gold)
     logging.info(f"Loaded {len(df_gold)} mine performance records to gold layer")
 
 def main():
-    """Main execution function"""
     setup_logging()
     config = get_config()
     
     try:
-        # Initialize ClickHouse connection
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
-        
-        # Get mine names
-        mine_names = get_mine_names(clickhouse_conn)
-        
-        # Extract data from silver layers
-        production_df, weather_df = extract_silver_data(clickhouse_conn)
+        ch_conn = ClickHouseConnector(config.clickhouse)
+        mine_names = get_mine_names(ch_conn)
+        production_df, weather_df = extract_silver_data(ch_conn)
         
         # Calculate mine performance metrics
         mine_performance_df = calculate_mine_performance(production_df, weather_df, mine_names)
@@ -288,8 +276,7 @@ def main():
         # Validate data
         validated_df = validate_mine_performance_data(mine_performance_df)
         
-        # Load to gold layer
-        load_to_gold(clickhouse_conn, validated_df)
+        load_to_gold(ch_conn, validated_df)
         
         logging.info("Gold mine performance pipeline completed successfully")
         

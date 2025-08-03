@@ -6,14 +6,12 @@ from typing import Optional, List, Dict, Any
 from config import DatabaseConfig
 
 class MySQLConnector:
-    """MySQL database connector"""
     
     def __init__(self, config: DatabaseConfig):
         self.config = config
         self.connection = None
         
     def connect(self):
-        """Establish MySQL connection"""
         try:
             self.connection = mysql.connector.connect(
                 host=self.config.host,
@@ -28,7 +26,6 @@ class MySQLConnector:
             raise
             
     def execute_query(self, query: str) -> pd.DataFrame:
-        """Execute SQL query and return DataFrame"""
         try:
             if not self.connection or not self.connection.is_connected():
                 self.connect()
@@ -38,20 +35,17 @@ class MySQLConnector:
             raise
             
     def close(self):
-        """Close MySQL connection"""
         if self.connection and self.connection.is_connected():
             self.connection.close()
             logging.info("MySQL connection closed")
 
 class ClickHouseConnector:
-    """ClickHouse database connector"""
     
     def __init__(self, config: DatabaseConfig):
         self.config = config
         self.client = None
         
     def connect(self):
-        """Establish ClickHouse connection"""
         try:
             self.client = clickhouse_connect.get_client(
                 host=self.config.host,
@@ -66,7 +60,6 @@ class ClickHouseConnector:
             raise
             
     def execute_query(self, query: str) -> pd.DataFrame:
-        """Execute SQL query and return DataFrame"""
         try:
             if not self.client:
                 self.connect()
@@ -77,7 +70,6 @@ class ClickHouseConnector:
             raise
             
     def insert_dataframe(self, table_name: str, df: pd.DataFrame):
-        """Insert DataFrame into ClickHouse table"""
         try:
             if not self.client:
                 self.connect()
@@ -88,7 +80,6 @@ class ClickHouseConnector:
             raise
             
     def execute_command(self, command: str):
-        """Execute SQL command"""
         try:
             if not self.client:
                 self.connect()

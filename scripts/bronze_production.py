@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Bronze Layer - Production Data Ingestion
-Extracts production data from MySQL and loads into ClickHouse bronze layer
-"""
 
 import sys
 import logging
@@ -13,7 +9,6 @@ from config import get_config
 from database_utils import MySQLConnector, ClickHouseConnector
 
 def setup_logging():
-    """Setup logging configuration"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -24,13 +19,12 @@ def setup_logging():
     )
 
 def extract_production_data(mysql_conn: MySQLConnector, start_date: str = None, end_date: str = None) -> pd.DataFrame:
-    """Extract production data from MySQL"""
     
-    # Default to last 30 days if no dates provided
+    # Default to sample data range if no dates provided
     if not end_date:
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = '2025-06-30'
     if not start_date:
-        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        start_date = '2025-06-01'
     
     query = f"""
     SELECT 
@@ -49,7 +43,6 @@ def extract_production_data(mysql_conn: MySQLConnector, start_date: str = None, 
     return mysql_conn.execute_query(query)
 
 def validate_production_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Basic validation and data quality checks"""
     initial_count = len(df)
     
     # Log data quality issues
@@ -69,8 +62,7 @@ def validate_production_data(df: pd.DataFrame) -> pd.DataFrame:
     logging.info(f"Validated {initial_count} production records")
     return df
 
-def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
-    """Load production data to bronze layer"""
+def load_to_bronze(ch_conn: ClickHouseConnector, df: pd.DataFrame):
     
     # Add metadata columns
     df['ingestion_timestamp'] = datetime.now()
@@ -85,15 +77,13 @@ def load_to_bronze(clickhouse_conn: ClickHouseConnector, df: pd.DataFrame):
         ALTER TABLE bronze_production_logs 
         DELETE WHERE date BETWEEN '{min_date}' AND '{max_date}'
         """
-        clickhouse_conn.execute_command(delete_query)
+        ch_conn.execute_command(delete_query)
         logging.info(f"Cleared existing data from {min_date} to {max_date}")
     
-    # Insert new data
-    clickhouse_conn.insert_dataframe('bronze_production_logs', df)
+    ch_conn.insert_dataframe('bronze_production_logs', df)
     logging.info(f"Loaded {len(df)} production records to bronze layer")
 
 def main():
-    """Main execution function"""
     setup_logging()
 
     # Add argument parsing
@@ -105,9 +95,8 @@ def main():
     config = get_config()
     
     try:
-        # Initialize connections
         mysql_conn = MySQLConnector(config.mysql)
-        clickhouse_conn = ClickHouseConnector(config.clickhouse)
+        ch_conn = ClickHouseConnector(config.clickhouse)
         
         # Extract data using provided dates or default
         production_df = extract_production_data(mysql_conn, args.start_date, args.end_date)
@@ -119,8 +108,7 @@ def main():
         # Validate data
         validated_df = validate_production_data(production_df)
         
-        # Load to bronze layer
-        load_to_bronze(clickhouse_conn, validated_df)
+        load_to_bronze(ch_conn, validated_df)
         
         logging.info("Bronze production pipeline completed successfully")
         
