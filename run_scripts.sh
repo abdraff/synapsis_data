@@ -20,7 +20,7 @@ print_status() {
 }
 
 # Create logs directory if it doesn't exist
-mkdir -p /app/logs
+mkdir -p ./logs
 
 print_status $BLUE "=== Coal Mining Data Pipeline - Individual Script Runners ==="
 
