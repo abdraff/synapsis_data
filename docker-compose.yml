@@ -1,12 +1,51 @@
 version: '3.8'
 
+x-airflow-common:
+  &airflow-common
+  build: .
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__PARALLELISM: 4
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: 2
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 1
+    MYSQL_HOST: mysql
+    MYSQL_USER: root
+    MYSQL_PASSWORD: root
+    MYSQL_DATABASE: coal_mining
+    CLICKHOUSE_HOST: clickhouse
+    CLICKHOUSE_USER: admin
+    CLICKHOUSE_PASSWORD: admin
+    CLICKHOUSE_DATABASE: coal_mining_dw
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./scripts:/app/scripts
+    - ./data:/app/data
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
 services:
-  # MySQL Database (Data Source)
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+    restart: always
+
   mysql:
     image: mysql:8.0
-    platform: linux/x86_64
-    container_name: mysql-db
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: coal_mining
@@ -15,59 +54,83 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./data/production_logs.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - mining_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
 
-  # ClickHouse Database (Data Warehouse)
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse-db
-    restart: always
-    ports:
-      - "8123:8123"
-      - "9000:9000"
     environment:
       CLICKHOUSE_DB: coal_mining_dw
       CLICKHOUSE_USER: admin
       CLICKHOUSE_PASSWORD: admin
+    ports:
+      - "8123:8123"
+      - "9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d
-    networks:
-      - mining_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
 
-  # Python Environment for ETL Scripts
-  etl-runner:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: etl-runner
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
     depends_on:
-      - mysql
-      - clickhouse
-    volumes:
-      - ./scripts:/app/scripts
-      - ./data:/app/data
-      - ./logs:/app/logs
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init
+        airflow users create \
+            --username admin \
+            --firstname Admin \
+            --lastname User \
+            --role Admin \
+            --email admin@example.com \
+            --password admin
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=root
-      - MYSQL_DATABASE=coal_mining
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=8123
-      - CLICKHOUSE_USER=admin
-      - CLICKHOUSE_PASSWORD=admin
-      - CLICKHOUSE_DATABASE=coal_mining_dw
-    networks:
-      - mining_network
-    command: tail -f /dev/null  # Keep container running
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+    user: "0:0"
 
 volumes:
+  postgres_data:
   mysql_data:
   clickhouse_data:
-
-networks:
-  mining_network:
-    driver: bridge

@@ -1,28 +1,24 @@
-FROM python:3.11-slim
+FROM apache/airflow:2.8.1-python3.11
 
-WORKDIR /app
-
-# Install system dependencies
+USER root
 RUN apt-get update && apt-get install -y \
-    gcc \
-    default-libmysqlclient-dev \
-    pkg-config \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+USER airflow
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir \
+    pandas==2.1.3 \
+    clickhouse-connect==0.6.23 \
+    mysql-connector-python==8.2.0 \
+    requests==2.31.0 \
+    python-dotenv==1.0.0 \
+    pydantic==2.5.0 \
+    schedule==1.2.0 \
+    great-expectations==0.18.8 \
+    psycopg2-binary \
+    apache-airflow-providers-postgres \
+    apache-airflow-providers-mysql
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Create directories
-RUN mkdir -p /app/scripts /app/data /app/logs
-
-# Copy scripts
-COPY scripts/ ./scripts/
-COPY data/ ./data/
-
-# Set permissions
-RUN chmod +x scripts/*.py
-
-CMD ["tail", "-f", "/dev/null"]
+WORKDIR /opt/airflow
